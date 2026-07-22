@@ -28,6 +28,7 @@ full_beaconchain_explorer = import_module(
     "./src/full_beaconchain/full_beaconchain_launcher.star"
 )
 blockscout = import_module("./src/blockscout/blockscout_launcher.star")
+lab_network = import_module("./src/lab/lab_network.star")
 prometheus = import_module("./src/prometheus/prometheus_launcher.star")
 grafana = import_module("./src/grafana/grafana_launcher.star")
 tempo = import_module("./src/tempo/tempo_launcher.star")
@@ -325,6 +326,12 @@ def run(plan, args={}):
     """
 
     args_with_right_defaults = input_parser.input_parser(plan, args)
+
+    if args_with_right_defaults.lab_mode:
+        return lab_network.launch_lab_network(
+            plan,
+            args_with_right_defaults,
+        )
 
     num_participants = len(args_with_right_defaults.participants)
     network_params = args_with_right_defaults.network_params

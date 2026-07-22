@@ -6,6 +6,116 @@ genesis_constants = import_module(
 
 sanity_check = import_module("./sanity_check.star")
 
+DEFAULT_LAB_CHAIN = {
+    "chain_name": "CampusChain",
+    "chain_id": 424242,
+    "native_token": {
+        "name": "Campus Token",
+        "symbol": "LAB",
+        "decimals": 18,
+        "base_unit": "wei",
+        "display_unit": "LAB",
+        "conversion": "1000000000000000000",
+    },
+    "fees": {
+        "block_gas_limit": 15000000,
+        "min_gas_price": 1000000000,
+    },
+    "consensus": {
+        "block_time_seconds": 3,
+    },
+    "accounts": {
+        "prefund": {},
+    },
+}
+
+
+def _dict_get(d, key, default):
+    if key in d:
+        return d[key]
+    return default
+
+
+def build_lab_chain(input_args):
+    user = {}
+    if "lab_chain" in input_args:
+        user = input_args["lab_chain"]
+
+    user_native = _dict_get(user, "native_token", {})
+    user_fees = _dict_get(user, "fees", {})
+    user_consensus = _dict_get(user, "consensus", {})
+    user_accounts = _dict_get(user, "accounts", {})
+
+    default_native = DEFAULT_LAB_CHAIN["native_token"]
+    default_fees = DEFAULT_LAB_CHAIN["fees"]
+    default_consensus = DEFAULT_LAB_CHAIN["consensus"]
+    default_accounts = DEFAULT_LAB_CHAIN["accounts"]
+
+    return {
+        "chain_name": _dict_get(
+            user,
+            "chain_name",
+            DEFAULT_LAB_CHAIN["chain_name"],
+        ),
+        "chain_id": _dict_get(
+            user,
+            "chain_id",
+            DEFAULT_LAB_CHAIN["chain_id"],
+        ),
+        "native_token": {
+            "name": _dict_get(user_native, "name", default_native["name"]),
+            "symbol": _dict_get(user_native, "symbol", default_native["symbol"]),
+            "decimals": _dict_get(user_native, "decimals", default_native["decimals"]),
+            "base_unit": _dict_get(user_native, "base_unit", default_native["base_unit"]),
+            "display_unit": _dict_get(user_native, "display_unit", default_native["display_unit"]),
+            "conversion": _dict_get(user_native, "conversion", default_native["conversion"]),
+        },
+        "fees": {
+            "block_gas_limit": _dict_get(
+                user_fees,
+                "block_gas_limit",
+                default_fees["block_gas_limit"],
+            ),
+            "min_gas_price": _dict_get(user_fees, "min_gas_price", default_fees["min_gas_price"]),
+        },
+        "consensus": {
+            "block_time_seconds": _dict_get(
+                user_consensus,
+                "block_time_seconds",
+                default_consensus["block_time_seconds"],
+            ),
+        },
+        "accounts": {
+            "prefund": _dict_get(user_accounts, "prefund", default_accounts["prefund"]),
+        },
+    }
+
+
+def lab_chain_to_struct(lab_chain):
+    return struct(
+        chain_name=lab_chain["chain_name"],
+        chain_id=lab_chain["chain_id"],
+        native_token=struct(
+            name=lab_chain["native_token"]["name"],
+            symbol=lab_chain["native_token"]["symbol"],
+            decimals=lab_chain["native_token"]["decimals"],
+            base_unit=lab_chain["native_token"]["base_unit"],
+            display_unit=lab_chain["native_token"]["display_unit"],
+            conversion=lab_chain["native_token"]["conversion"],
+        ),
+        fees=struct(
+            block_gas_limit=lab_chain["fees"]["block_gas_limit"],
+            min_gas_price=lab_chain["fees"]["min_gas_price"],
+        ),
+        consensus=struct(
+            block_time_seconds=lab_chain["consensus"]["block_time_seconds"],
+        ),
+        accounts=struct(
+            prefund=lab_chain["accounts"]["prefund"],
+        ),
+    )
+
+
 DEFAULT_EL_IMAGES = {
     "geth": "ethereum/client-go:latest",
     "erigon": "erigontech/erigon:latest",
@@ -97,6 +207,7 @@ ATTR_TO_BE_SKIPPED_AT_ROOT = (
     "buildoor_params",
     "ethereum_genesis_generator_params",
     "trueblocks_params",
+    "lab_chain",
 )
 
 
@@ -793,10 +904,13 @@ def input_parser(plan, input_args):
         )
 
     return struct(
+        lab_mode=result["lab_mode"],
+        lab_chain=lab_chain_to_struct(result["lab_chain"]),
         participants=[
             struct(
                 el_type=participant["el_type"],
                 el_image=participant["el_image"],
+                el_image_was_provided=participant["el_image_was_provided"],
                 el_binary_path=participant["el_binary_path"],
                 el_log_level=participant["el_log_level"],
                 el_storage_type=participant["el_storage_type"],
@@ -1504,6 +1618,8 @@ def parse_network_params(plan, input_args):
                 for sub_attr, sub_value in participant.items():
                     # if the value is set in input we set it in participant
                     new_participant[sub_attr] = sub_value
+                    if sub_attr == "el_image" and sub_value != "":
+                        new_participant["el_image_was_provided"] = True
                 for _ in range(0, new_participant["count"]):
                     participant_copy = deep_copy_participant(new_participant)
                     participants.append(participant_copy)
@@ -1848,6 +1964,8 @@ def default_input_args(input_args):
 
     participants_matrix = []
 
+    lab_chain = build_lab_chain(input_args)
+
     if (
         "network_params" in input_args
         and "network" in input_args["network_params"]
@@ -1893,6 +2011,8 @@ def default_input_args(input_args):
         "spamoor_params": get_default_spamoor_params(),
         "disruptoor_params": get_default_disruptoor_params(),
         "bootnodoor_params": get_default_bootnodoor_params(),
+        "lab_mode": False,
+        "lab_chain": lab_chain,
     }
 
 
@@ -2072,6 +2192,7 @@ def default_participant():
     return {
         "el_type": "geth",
         "el_image": "",
+        "el_image_was_provided": False,
         "el_binary_path": "",
         "el_log_level": "",
         "el_storage_type": "",

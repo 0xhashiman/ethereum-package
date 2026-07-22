@@ -74,6 +74,7 @@ def launch_blockscout(
     blockscout_params,
     network_params,
     shadowfork_block_height="",
+    lab_chain=None,
 ):
     tolerations = shared_utils.get_tolerations(global_tolerations=global_tolerations)
     postgres_output = postgres.run(
@@ -119,6 +120,7 @@ def launch_blockscout(
         docker_cache_params,
         blockscout_params,
         shadowfork_block_height,
+        lab_chain,
     )
     blockscout_service = plan.add_service(SERVICE_NAME_BLOCKSCOUT, config_backend)
     plan.print(blockscout_service)
@@ -137,6 +139,7 @@ def launch_blockscout(
         tolerations,
         blockscout_service,
         port_publisher,
+        lab_chain,
     )
     plan.add_service(SERVICE_NAME_FRONTEND, config_frontend)
     return blockscout_url
@@ -193,6 +196,7 @@ def get_config_backend(
     docker_cache_params,
     blockscout_params,
     shadowfork_block_height="",
+    lab_chain=None,
 ):
     database_url = "{protocol}://{user}:{password}@{hostname}:{port}/{database}".format(
         protocol="postgresql",
@@ -233,6 +237,11 @@ def get_config_backend(
         env_vars["INDEXER_START_BLOCK"] = shadowfork_block_height
         env_vars["TRACE_FIRST_BLOCK"] = shadowfork_block_height
 
+    if lab_chain != None:
+        env_vars["COIN"] = lab_chain.native_token.symbol
+        env_vars["NETWORK"] = lab_chain.chain_name
+        env_vars["SUBNETWORK"] = lab_chain.chain_name
+
     env_vars.update(blockscout_params.env)
 
     return ServiceConfig(
@@ -267,6 +276,7 @@ def get_config_frontend(
     tolerations,
     blockscout_service,
     port_publisher,
+    lab_chain=None,
 ):
     env_vars = {
         "HOSTNAME": "0.0.0.0",
@@ -292,6 +302,21 @@ def get_config_frontend(
         "NEXT_PUBLIC_USE_NEXT_JS_PROXY": "true",
         "PORT": str(HTTP_PORT_NUMBER_FRONTEND),
     }
+
+    if lab_chain != None:
+        env_vars.update(
+            {
+                "NEXT_PUBLIC_NETWORK_NAME": lab_chain.chain_name,
+                "NEXT_PUBLIC_NETWORK_ID": str(lab_chain.chain_id),
+                "NEXT_PUBLIC_NETWORK_CURRENCY_NAME": lab_chain.native_token.name,
+                "NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL": lab_chain.native_token.symbol,
+                "NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS": str(
+                    lab_chain.native_token.decimals
+                ),
+                "NEXT_PUBLIC_NETWORK_CURRENCY_WEI_NAME": lab_chain.native_token.base_unit,
+            }
+        )
+
     env_vars.update(blockscout_params.env)
 
     return ServiceConfig(

@@ -480,6 +480,14 @@ SUBCATEGORY_PARAMS = {
         "scrape",
         "env",
     ],
+    "lab_chain": [
+        "chain_name",
+        "chain_id",
+        "native_token",
+        "fees",
+        "consensus",
+        "accounts",
+    ],
 }
 
 ADDITIONAL_SERVICES_PARAMS = [
@@ -533,6 +541,7 @@ ADDITIONAL_CATEGORY_PARAMS = {
     "keymanager_enabled": "",
     "checkpoint_sync_enabled": "",
     "checkpoint_sync_url": "",
+    "lab_mode": "",
 }
 
 TRUEBLOCKS_NESTED_PARAMS = {
@@ -541,6 +550,27 @@ TRUEBLOCKS_NESTED_PARAMS = {
         "snap_to_grid",
         "first_snap",
         "unripe_dist",
+    ],
+}
+
+LAB_CHAIN_NESTED_PARAMS = {
+    "native_token": [
+        "name",
+        "symbol",
+        "decimals",
+        "base_unit",
+        "display_unit",
+        "conversion",
+    ],
+    "fees": [
+        "block_gas_limit",
+        "min_gas_price",
+    ],
+    "consensus": [
+        "block_time_seconds",
+    ],
+    "accounts": [
+        "prefund",
     ],
 }
 
@@ -642,6 +672,13 @@ def sanity_check(plan, input_args):
         "trueblocks_params",
         TRUEBLOCKS_NESTED_PARAMS,
         ["image", "target_rpc_url", "target_index", "env"],
+    )
+    validate_nested_params(
+        plan,
+        input_args,
+        "lab_chain",
+        LAB_CHAIN_NESTED_PARAMS,
+        ["chain_name", "chain_id"],
     )
 
     # Checks additional services

@@ -1,0 +1,36 @@
+lab_mode: true
+
+participants:
+  - el_type: geth
+    el_image: lab-geth:local
+    cl_type: lighthouse
+    cl_image: lab-cl:local
+    count: 3
+
+lab_chain:
+  chain_name: "CampusChain"
+  chain_id: 424242
+
+  native_token:
+    name: "Campus"
+    symbol: "CAM"
+    decimals: 18
+    base_unit: "cai"
+    display_unit: "CAM"
+    conversion: "1000000000000000000"
+
+  fees:
+    block_gas_limit: 15000000
+    min_gas_price: 1000000000
+
+  consensus:
+    block_time_seconds: 3
+
+  accounts:
+    prefund:
+      "0xe9584bb902Ed91FfB41F75103eC99B7A929530E0": "1000LAB"
+      "0x23ee436fdA6Bf95b9A0d7169B2aAf7187e54BC59": "1000LAB"
+      "0x8310Baa6177275e52Ab011B12690915d76CcC9a7": "1000LAB"
+
+additional_services:
+  - blockscout
