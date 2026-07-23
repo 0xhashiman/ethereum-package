@@ -11,7 +11,11 @@ HTTP_PORT_NUMBER = 4000
 HTTP_PORT_NUMBER_VERIF = 8050
 HTTP_PORT_NUMBER_FRONTEND = 3000
 DEFAULT_BLOCKSCOUT_BACKEND_IMAGE = "ghcr.io/blockscout/blockscout:latest"
+DEFAULT_BLOCKSCOUT_VERIF_IMAGE = "ghcr.io/blockscout/smart-contract-verifier:latest"
+DEFAULT_BLOCKSCOUT_FRONTEND_IMAGE = "ghcr.io/blockscout/frontend:latest"
 LAB_BLOCKSCOUT_BACKEND_IMAGE = "blockscout/blockscout:7.0.2.commit.4da76a19"
+LAB_BLOCKSCOUT_VERIF_IMAGE = "0xhashiman/blockscout-verifier:latest"
+LAB_BLOCKSCOUT_FRONTEND_IMAGE = "0xhashiman/blockscout-frontend:latest"
 
 
 def get_backend_image(blockscout_params, lab_chain):
@@ -21,6 +25,24 @@ def get_backend_image(blockscout_params, lab_chain):
     ):
         return LAB_BLOCKSCOUT_BACKEND_IMAGE
     return blockscout_params.image
+
+
+def get_verif_image(blockscout_params, lab_chain):
+    if (
+        lab_chain != None
+        and blockscout_params.verif_image == DEFAULT_BLOCKSCOUT_VERIF_IMAGE
+    ):
+        return LAB_BLOCKSCOUT_VERIF_IMAGE
+    return blockscout_params.verif_image
+
+
+def get_frontend_image(blockscout_params, lab_chain):
+    if (
+        lab_chain != None
+        and blockscout_params.frontend_image == DEFAULT_BLOCKSCOUT_FRONTEND_IMAGE
+    ):
+        return LAB_BLOCKSCOUT_FRONTEND_IMAGE
+    return blockscout_params.frontend_image
 
 
 def get_api_host(blockscout_service, port_publisher):
@@ -112,6 +134,7 @@ def launch_blockscout(
         additional_service_index,
         docker_cache_params,
         blockscout_params,
+        lab_chain,
     )
     verif_service_name = "{}-verif".format(SERVICE_NAME_BLOCKSCOUT)
     verif_service = plan.add_service(verif_service_name, config_verif)
@@ -163,6 +186,7 @@ def get_config_verif(
     additional_service_index,
     docker_cache_params,
     blockscout_params,
+    lab_chain=None,
 ):
     public_ports = shared_utils.get_additional_service_standard_public_port(
         port_publisher,
@@ -181,7 +205,7 @@ def get_config_verif(
     return ServiceConfig(
         image=shared_utils.docker_cache_image_calc(
             docker_cache_params,
-            blockscout_params.verif_image,
+            get_verif_image(blockscout_params, lab_chain),
         ),
         ports=VERIF_USED_PORTS,
         public_ports=public_ports,
@@ -333,7 +357,7 @@ def get_config_frontend(
     return ServiceConfig(
         image=shared_utils.docker_cache_image_calc(
             docker_cache_params,
-            blockscout_params.frontend_image,
+            get_frontend_image(blockscout_params, lab_chain),
         ),
         ports=FRONTEND_USED_PORTS,
         public_ports=FRONTEND_USED_PORTS,
