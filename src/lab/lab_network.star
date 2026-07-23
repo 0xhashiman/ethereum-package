@@ -7,6 +7,7 @@ genesis = import_module("./genesis.star")
 cl_config = import_module("./cl_config.star")
 input_parser = import_module("../package_io/input_parser.star")
 shared_utils = import_module("../shared_utils/shared_utils.star")
+spamoor = import_module("../spamoor/spamoor.star")
 static_files = import_module("../static_files/static_files.star")
 
 RPC_PORT_NUM = 8545
@@ -23,6 +24,134 @@ LAB_CL_CONFIG_ARTIFACT_NAME = "lab-cl-config"
 LAB_CL_CONFIG_MOUNTPOINT = "/config"
 LAB_CL_CONFIG_PATH = LAB_CL_CONFIG_MOUNTPOINT + "/lab-cl.json"
 LAB_CL_P2P_PORT_ID = "cl-p2p"
+LAB_SPAMOOR_ACCOUNT_ADDRESS = "0xa0Ee7A142d267C1f36714E4a8F75612F20a79720"
+LAB_SPAMOOR_ACCOUNT_PRIVATE_KEY = (
+    "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
+)
+LAB_SPAMOOR_ACCOUNT_BALANCE_TOKENS = 10000
+LAB_SPAMOOR_MAX_THROUGHPUT = 50
+LAB_SPAMOOR_MAX_WALLETS = 20
+LAB_SPAMOOR_MIN_BASE_FEE_GWEI = 20
+GWEI = 1000000000
+EOA_TX_GAS = 21000
+
+
+def _min_int(left, right):
+    if left < right:
+        return left
+    return right
+
+
+def _max_int(left, right):
+    if left > right:
+        return left
+    return right
+
+
+def _ceil_div(numerator, denominator):
+    if numerator == 0:
+        return 0
+    return ((numerator - 1) // denominator) + 1
+
+
+def _has_additional_service(args_with_right_defaults, service_name):
+    for service in args_with_right_defaults.additional_services:
+        if service == service_name:
+            return True
+    return False
+
+
+def _lab_spamoor_prefunded_accounts():
+    account = struct(
+        address=LAB_SPAMOOR_ACCOUNT_ADDRESS,
+        private_key=LAB_SPAMOOR_ACCOUNT_PRIVATE_KEY,
+    )
+    accounts = []
+    for _ in range(14):
+        accounts.append(account)
+    return accounts
+
+
+def _lab_spamoor_throughput(lab_chain):
+    block_time = int(lab_chain.consensus.block_time_seconds)
+    block_gas_limit = int(lab_chain.fees.block_gas_limit)
+    txs_per_block = block_gas_limit // EOA_TX_GAS
+    if block_time <= 0 or txs_per_block <= 0:
+        return 1
+    return _max_int(
+        1,
+        _min_int(LAB_SPAMOOR_MAX_THROUGHPUT, txs_per_block // block_time),
+    )
+
+
+def _lab_spamoor_max_pending(lab_chain):
+    return _max_int(
+        1,
+        _lab_spamoor_throughput(lab_chain)
+        * int(lab_chain.consensus.block_time_seconds),
+    )
+
+
+def _lab_spamoor_base_fee_gwei(lab_chain):
+    min_tip_gwei = _ceil_div(int(lab_chain.fees.min_gas_price), GWEI)
+    return _max_int(
+        LAB_SPAMOOR_MIN_BASE_FEE_GWEI,
+        min_tip_gwei * 10,
+    )
+
+
+def _lab_spamoor_params(spamoor_params, lab_chain):
+    return struct(
+        image=spamoor_params.image,
+        min_cpu=spamoor_params.min_cpu,
+        max_cpu=spamoor_params.max_cpu,
+        min_mem=spamoor_params.min_mem,
+        max_mem=spamoor_params.max_mem,
+        extra_args=spamoor_params.extra_args,
+        spammers=[
+            {
+                "name": "Lab EOA Spammer",
+                "description": "EOA transactions for lab block filling",
+                "scenario": "eoatx",
+                "config": {
+                    "throughput": _lab_spamoor_throughput(lab_chain),
+                    "max_pending": _lab_spamoor_max_pending(lab_chain),
+                    "max_wallets": LAB_SPAMOOR_MAX_WALLETS,
+                    "base_fee": _lab_spamoor_base_fee_gwei(lab_chain),
+                },
+            },
+        ],
+    )
+
+
+def _lab_chain_with_spamoor_account(lab_chain):
+    prefund = {}
+    spamoor_address = LAB_SPAMOOR_ACCOUNT_ADDRESS.lower()
+    for address, account in lab_chain.accounts.prefund.items():
+        if address.lower() != spamoor_address:
+            prefund[address] = account
+    prefund[LAB_SPAMOOR_ACCOUNT_ADDRESS] = str(
+        LAB_SPAMOOR_ACCOUNT_BALANCE_TOKENS
+        * int(lab_chain.native_token.conversion)
+    )
+
+    return struct(
+        chain_name=lab_chain.chain_name,
+        chain_id=lab_chain.chain_id,
+        native_token=lab_chain.native_token,
+        fees=lab_chain.fees,
+        consensus=lab_chain.consensus,
+        accounts=struct(prefund=prefund),
+    )
+
+
+def _new_lab_participant_context(el_ctx):
+    return struct(
+        el_context=el_ctx,
+        cl_context=struct(client_name="lab-cl"),
+        vc_context=None,
+        snooper_el_rpc_context=None,
+    )
 
 
 def _render_artifact(plan, filename, content, name):
@@ -334,9 +463,9 @@ def _validate_lab_inputs(args_with_right_defaults):
             fail("lab_mode requires patched lab-cl image")
 
     for service in args_with_right_defaults.additional_services:
-        if service != "blockscout":
+        if service != "blockscout" and service != "spamoor":
             fail(
-                "lab_mode currently supports only blockscout in additional_services, got {0}".format(
+                "lab_mode currently supports only blockscout and spamoor in additional_services, got {0}".format(
                     service
                 )
             )
@@ -346,6 +475,9 @@ def launch_lab_network(plan, args_with_right_defaults):
     _validate_lab_inputs(args_with_right_defaults)
 
     lab_chain = args_with_right_defaults.lab_chain
+    if _has_additional_service(args_with_right_defaults, "spamoor"):
+        lab_chain = _lab_chain_with_spamoor_account(lab_chain)
+
     genesis_artifact = _render_artifact(
         plan,
         "genesis.json",
@@ -368,6 +500,7 @@ def launch_lab_network(plan, args_with_right_defaults):
 
     all_el_contexts = []
     all_cl_services = []
+    all_participants = []
     bootnode_enode = ""
     for index, participant in enumerate(args_with_right_defaults.participants):
         service_name = _service_name(index)
@@ -404,6 +537,7 @@ def launch_lab_network(plan, args_with_right_defaults):
                 force_update=participant.cl_force_restart,
             )
         )
+        all_participants.append(_new_lab_participant_context(context))
 
     blockscout_url = None
     for index, service in enumerate(args_with_right_defaults.additional_services):
@@ -420,6 +554,22 @@ def launch_lab_network(plan, args_with_right_defaults):
                 args_with_right_defaults.blockscout_params,
                 struct(network_id=str(lab_chain.chain_id)),
                 lab_chain=lab_chain,
+            )
+        elif service == "spamoor":
+            spamoor.launch_spamoor(
+                plan,
+                read_file(static_files.SPAMOOR_CONFIG_TEMPLATE_FILEPATH),
+                read_file(static_files.SPAMOOR_HOSTS_TEMPLATE_FILEPATH),
+                _lab_spamoor_prefunded_accounts(),
+                all_participants,
+                args_with_right_defaults.participants,
+                _lab_spamoor_params(args_with_right_defaults.spamoor_params, lab_chain),
+                args_with_right_defaults.global_node_selectors,
+                args_with_right_defaults.global_tolerations,
+                struct(network_id=str(lab_chain.chain_id)),
+                args_with_right_defaults.port_publisher,
+                index,
+                "",
             )
 
     plan.print(

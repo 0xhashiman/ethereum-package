@@ -10,6 +10,17 @@ SERVICE_NAME_FRONTEND = "blockscout-frontend"
 HTTP_PORT_NUMBER = 4000
 HTTP_PORT_NUMBER_VERIF = 8050
 HTTP_PORT_NUMBER_FRONTEND = 3000
+DEFAULT_BLOCKSCOUT_BACKEND_IMAGE = "ghcr.io/blockscout/blockscout:latest"
+LAB_BLOCKSCOUT_BACKEND_IMAGE = "blockscout/blockscout:7.0.2.commit.4da76a19"
+
+
+def get_backend_image(blockscout_params, lab_chain):
+    if (
+        lab_chain != None
+        and blockscout_params.image == DEFAULT_BLOCKSCOUT_BACKEND_IMAGE
+    ):
+        return LAB_BLOCKSCOUT_BACKEND_IMAGE
+    return blockscout_params.image
 
 
 def get_api_host(blockscout_service, port_publisher):
@@ -23,7 +34,7 @@ def get_api_port(blockscout_service, port_publisher):
         public_ports = shared_utils.get_public_ports_for_component(
             "additional_services", port_publisher, 0
         )
-        return public_ports[0]  # First port for the API
+        return public_ports[1]  # Backend API; port 0 is the verifier service
     return blockscout_service.ports["http"].number
 
 
@@ -247,7 +258,7 @@ def get_config_backend(
     return ServiceConfig(
         image=shared_utils.docker_cache_image_calc(
             docker_cache_params,
-            blockscout_params.image,
+            get_backend_image(blockscout_params, lab_chain),
         ),
         ports=USED_PORTS,
         public_ports=public_ports,
